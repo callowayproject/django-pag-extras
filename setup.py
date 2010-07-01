@@ -11,7 +11,7 @@ def read_file(filename):
 
 setup(
     name = "django-pag-extras",
-    version = __import__('django_pag_extras').get_version().replace(' ', '-'),
+    version = __import__('pag_extras').get_version().replace(' ', '-'),
     url = '',
     author = 'Corey Oordt',
     author_email = 'coreyoordt@gmail.com',
