@@ -1,0 +1,2 @@
+BeautifulSoup
+django-pagination==1.0.5

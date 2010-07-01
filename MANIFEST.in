@@ -1,0 +1,9 @@
+recursive-include doc_src *
+recursive-include docs *
+
+recursive-include django_pag_extras/media *
+recursive-include django_pag_extras/templates *
+
+include LICENSE
+include README
+include *.txt
