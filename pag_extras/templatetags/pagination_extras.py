@@ -1,7 +1,8 @@
 from django import template
 from django.conf import settings
+from django.utils.safestring import mark_safe
 
-from pag_extras.paragraph_parser import HTMLTagPaginator, LinePaginator, DoubleLinePaginator
+from pag_extras.paragraph_parser import html_block_tag_list, line_list, dbl_line_list
 
 P_PER_PAGE = getattr(settings, 'PAGINATION_P_PER_PAGE', 20)
 ORPHANS = getattr(settings, 'PAGINATION_P_ORPHANS', 4)
@@ -9,71 +10,58 @@ ORPHANS = getattr(settings, 'PAGINATION_P_ORPHANS', 4)
 register = template.Library()
 
 parsers = {
-    'html': HTMLTagPaginator,
-    'line': LinePaginator,
-    'dline': DoubleLinePaginator,
+    'html': html_block_tag_list,
+    'line': line_list,
+    'dline': dbl_line_list,
 }
 
-def do_paragraph_paginate(parser, token):
+def do_get_paragraphs(parser, token):
     """
     Splits the arguments to the paragraph_paginate tag and formats them correctly
-    The first part of the name of the tag, indicates the paragraph parsing type:
+    The second part of the name of the tag, indicates the paragraph parsing type:
     
     * html
     * line
     * dline (double line)
     
-    {% html_tag_paginate story %}
+    The results of this can be passed to the ``autopaginate`` tag for pagination
     
-    Put the ``PAGINATION_P_PER_PAGE`` paragraphs of ``story`` for the 
-    current page into ``object_list``
+    {% get_[html|line|dline]_paragraphs story as paragraphs %}
     
-    {% html_tag_paginate story 10 %}
-    
-    Put the 10 paragraphs of the ``story`` variable for the current page into 
-    ``object_list``
-    
-    {% html_tag_paginate story as paragraphs %}
-    
-    Put the ``PAGINATION_P_PER_PAGE`` paragraphs of ``story`` for the 
-    current page into ``paragraphs``
-    
-    {% html_tag_paginate story 10 as paragraphs %}
-    
-    Put the 10 paragraphs of ``story`` for the current page into ``paragraphs``
+    Convert the paragraphs of ``story`` for the into ``paragraphs``
     """
     bits = token.split_contents()
-    parser_type = bits[0].split("_")[0]
-    as_index = None
-    context_var = None
-    for i, bit in enumerate(bits):
-        if bit == 'as':
-            as_index = i
-            break
-    if as_index is not None:
-        try:
-            context_var = bits[as_index + 1]
-        except IndexError:
-            raise template.TemplateSyntaxError("Context variable assignment " +\
-                "must take the form of {%% %r content_variable ... as " + \
-                "context_var_name %%}" % bits[0])
-        del bits[as_index:as_index + 2]
-    else:
-        context_var = 'object_list'
-    
-    if len(bits) == 2:
-        parser[parser_type](bits[1], context_var=context_var)
-    elif len(bits) == 3:
-        parser[parser_type](bits[1], paginate_by=int(bits[2]), context_var=context_var)
-    else:
+    parser_type = bits[0].split("_")[1]
+    if len(bits) != 4:
         raise template.TemplateSyntaxError("The %(tag)s tag should be in the " + \
-            "format {%% %(tag)s <content_var> [<p per pg>] [as <context_var>] " +\
+            "format {%% %(tag)s <content_var> as <context_var> " +\
             "%%}" % {'tag':bits[0]})
+    
+    content_var = bits[1]
+    context_var = bits[3]
+    
+    return GetParagraphsNode(parser_type, content_var, context_var)
+    
 
-class HTMLTagPaginateNode(Auto):
+class GetParagraphsNode(template.Node):
     """
-    Converts HTML-formatted text into a list of block tags
+    Converts text into a list of block tags for use in pagination
     """
-register.tag('html_para_paginate', do_paragraph_paginate)
-register.tag('line_para_paginate', do_paragraph_paginate)
-register.tag('dline_para_paginate', do_paragraph_paginate)
+    def __init__(self, parser_type, content_var, context_var):
+        self.parser_type = parser_type
+        self.content_var = template.Variable(content_var)
+        self.context_var = template.Variable(context_var)
+    
+    def render(self, context):
+        paragraphs = parsers[self.parser_type](self.content_var.resolve(context))
+        try:
+            context_var = self.context_var.resolve(context)
+        except template.VariableDoesNotExist:
+            context_var = self.context_var.var
+        context[context_var] = [mark_safe(item) for item in paragraphs]
+        return u''
+
+
+register.tag('get_html_paragraphs', do_get_paragraphs)
+register.tag('get_line_paragraphs', do_get_paragraphs)
+register.tag('get_dline_paragraphs', do_get_paragraphs)
